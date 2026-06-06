@@ -1,0 +1,22 @@
+{{ company_name }} — Weekly Timesheet
+{{ week_start|date:"d M Y" }} to {{ week_end|date:"d M Y" }}
+
+Hi {{ user.first_name|default:user.email }},
+
+Here is your timesheet summary for the week ending {{ week_end|date:"l, d F Y" }}.
+
+TOTALS
+------
+Hours:  {{ total_hours|floatformat:2 }}h
+Amount: ${{ total_amount|floatformat:2 }}
+
+BREAKDOWN BY PROJECT
+--------------------
+{% for p in project_summary %}{{ p.name }} ({{ p.client }})
+  Hours:  {{ p.hours|floatformat:2 }}h
+  Amount: ${{ p.amount|floatformat:2 }}
+{% endfor %}
+The full daily timesheet is attached as {{ filename }}.
+
+--
+{{ company_name }} · Sent automatically by Timesheet

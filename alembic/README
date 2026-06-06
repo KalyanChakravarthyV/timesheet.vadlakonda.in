@@ -1,0 +1,14 @@
+Alembic migration environment for raw SQL migrations against Supabase PostgreSQL.
+
+Django handles ORM-level schema changes via its own migration system (manage.py migrate).
+Alembic is used here for:
+  - Custom SQL procedures, triggers, and views
+  - Index tuning migrations
+  - Data migrations that are easier to express in raw SQL
+
+Usage:
+  alembic revision -m "add_weekly_summary_view"   # new migration
+  alembic upgrade head                             # apply all pending
+  alembic downgrade -1                             # roll back one step
+  alembic current                                  # show current revision
+  alembic history                                  # list all revisions
