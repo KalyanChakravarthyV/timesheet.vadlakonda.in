@@ -38,6 +38,13 @@
       Clients
     </a>
 
+    <a href="{% url 'ui:payment_list' %}"
+       class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition
+              {% if 'payment' in url_name %}bg-white/15 text-white{% else %}text-blue-100 hover:bg-white/10{% endif %}">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+      Payments
+    </a>
+
     <div class="pt-2 mt-2 border-t border-white/10">
       <a href="{% url 'ui:weekly_report' %}"
          class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition

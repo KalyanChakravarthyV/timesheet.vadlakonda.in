@@ -25,4 +25,9 @@ urlpatterns = [
     path("reports/weekly/",       views.weekly_report, name="weekly_report"),
     path("reports/weekly/export/",views.weekly_export, name="weekly_export"),
     path("reports/weekly/send/",  views.weekly_send,   name="weekly_send"),
+
+    path("payments/",                        views.payment_list,     name="payment_list"),
+    path("payments/add/",                    views.payment_add,      name="payment_add"),
+    path("payments/<uuid:pk>/",              views.payment_detail,   name="payment_detail"),
+    path("payments/<uuid:pk>/document/",     views.payment_document, name="payment_document"),
 ]

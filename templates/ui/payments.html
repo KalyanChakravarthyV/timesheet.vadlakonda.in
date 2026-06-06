@@ -1,0 +1,77 @@
+{% extends "ui/base.html" %}
+{% block title %}Payments{% endblock %}
+{% block page_title %}Payments{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <p class="text-sm text-slate-500">{{ payments|length }} payment{{ payments|length|pluralize }}</p>
+  <a href="{% url 'ui:payment_add' %}"
+     class="px-4 py-2 bg-brand-600 text-white text-sm font-semibold rounded-lg hover:bg-brand-700 transition">+ Record Payment</a>
+</div>
+
+{% if payments %}
+<div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+      <tr>
+        <th class="px-5 py-3 text-left">Date</th>
+        <th class="px-5 py-3 text-left">Paid To</th>
+        <th class="px-5 py-3 text-left">Paid By</th>
+        <th class="px-5 py-3 text-left">Reference</th>
+        <th class="px-5 py-3 text-right">Amount</th>
+        <th class="px-5 py-3 text-center">Status</th>
+        <th class="px-5 py-3 text-center">Entries</th>
+        <th class="px-5 py-3 text-center">Doc</th>
+        <th class="px-5 py-3"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100">
+      {% for payment in payments %}
+      <tr class="hover:bg-slate-50 transition group">
+        <td class="px-5 py-3 text-slate-500 whitespace-nowrap">{{ payment.payment_date|date:"d M Y" }}</td>
+        <td class="px-5 py-3 font-medium text-slate-800">{{ payment.paid_to.get_full_name|default:payment.paid_to.email }}</td>
+        <td class="px-5 py-3 text-slate-500">{{ payment.paid_by.get_full_name|default:payment.paid_by.email|default:"—" }}</td>
+        <td class="px-5 py-3 text-slate-500">{{ payment.reference|default:"—" }}</td>
+        <td class="px-5 py-3 text-right font-mono font-semibold text-green-700">${{ payment.amount|floatformat:2 }}</td>
+        <td class="px-5 py-3 text-center">
+          {% if payment.status == "confirmed" %}
+          <span class="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700 font-medium">Confirmed</span>
+          {% elif payment.status == "pending" %}
+          <span class="px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-700 font-medium">Pending</span>
+          {% else %}
+          <span class="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700 font-medium">Disputed</span>
+          {% endif %}
+        </td>
+        <td class="px-5 py-3 text-center text-slate-500">{{ payment.entries.count }}</td>
+        <td class="px-5 py-3 text-center">
+          {% if payment.document %}
+          <a href="{% url 'ui:payment_document' payment.id %}" target="_blank"
+             class="text-xs text-brand-600 hover:underline">View ↗</a>
+          {% else %}
+          <span class="text-slate-300">—</span>
+          {% endif %}
+        </td>
+        <td class="px-5 py-3 text-right">
+          <a href="{% url 'ui:payment_detail' payment.id %}"
+             class="text-xs text-brand-600 hover:underline opacity-0 group-hover:opacity-100 transition">Details →</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot class="bg-slate-50 border-t border-slate-200">
+      <tr>
+        <td colspan="4" class="px-5 py-3 text-sm text-slate-600 font-medium">Total</td>
+        <td class="px-5 py-3 text-right font-mono font-bold text-green-700">${{ total_paid|floatformat:2 }}</td>
+        <td colspan="4"></td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% else %}
+<div class="bg-white rounded-xl border border-slate-200 px-5 py-16 text-center text-slate-400">
+  <p class="text-4xl mb-3">💸</p>
+  <p class="text-sm mb-3">No payments recorded yet.</p>
+  <a href="{% url 'ui:payment_add' %}" class="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700 transition">Record first payment</a>
+</div>
+{% endif %}
+{% endblock %}

@@ -129,6 +129,13 @@ class TimeEntry(TimestampedModel):
     # Timer support
     started_at = models.DateTimeField(null=True, blank=True)
     stopped_at = models.DateTimeField(null=True, blank=True)
+    # Payment tracking
+    is_paid = models.BooleanField(default=False, db_index=True)
+    paid_at = models.DateField(null=True, blank=True)
+    payment = models.ForeignKey(
+        "Payment", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="paid_entries",
+    )
 
     objects = ActiveManager()
     all_objects = models.Manager()
@@ -154,6 +161,55 @@ class TimeEntry(TimestampedModel):
     def amount(self):
         rate = self.hourly_rate or Decimal("0.00")
         return (self.hours * rate).quantize(Decimal("0.01"))
+
+
+def payment_document_path(instance, filename):
+    ext = filename.rsplit(".", 1)[-1].lower()
+    return f"payments/{instance.id}.{ext}"
+
+
+class Payment(TimestampedModel):
+    """A recorded payment covering one or more time entries."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        CONFIRMED = "confirmed", "Confirmed"
+        DISPUTED = "disputed", "Disputed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    paid_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="payments_made",
+    )
+    paid_to = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="payments_received",
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    payment_date = models.DateField()
+    reference = models.CharField(max_length=255, blank=True, help_text="Transaction ID / cheque number")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.CONFIRMED)
+    notes = models.TextField(blank=True)
+    document = models.FileField(
+        upload_to=payment_document_path, null=True, blank=True,
+        help_text="Receipt, bank statement, or invoice (PDF/PNG/JPG)",
+    )
+    entries = models.ManyToManyField(
+        "TimeEntry", blank=True, related_name="payments",
+    )
+
+    objects = ActiveManager()
+    all_objects = models.Manager()
+
+    class Meta:
+        ordering = ["-payment_date", "-created_at"]
+
+    def __str__(self):
+        return f"Payment #{str(self.id)[:8]} — {self.paid_to.email} — {self.payment_date} (${self.amount})"
+
+    def mark_entries_paid(self):
+        self.entries.filter(is_deleted=False).update(
+            is_paid=True, paid_at=self.payment_date, payment_id=self.id
+        )
 
 
 class WeeklyReport(TimestampedModel):

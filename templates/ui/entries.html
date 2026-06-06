@@ -49,6 +49,7 @@
         <th class="px-5 py-3 text-right">Hours</th>
         <th class="px-5 py-3 text-right">Amount</th>
         <th class="px-5 py-3 text-center">Billable</th>
+        <th class="px-5 py-3 text-center">Paid</th>
         <th class="px-5 py-3"></th>
       </tr>
     </thead>
@@ -81,15 +82,35 @@
           <span class="inline-block w-2 h-2 rounded-full bg-slate-300"></span>
           {% endif %}
         </td>
+        <td class="px-5 py-3 text-center">
+          {% if entry.is_paid %}
+          <span title="Paid on {{ entry.paid_at }}">
+            {% if entry.payment %}
+            <a href="{% url 'ui:payment_detail' entry.payment.id %}"
+               class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition">
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-green-500"></span> Paid
+            </a>
+            {% else %}
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700">
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-green-500"></span> Paid
+            </span>
+            {% endif %}
+          </span>
+          {% else %}
+          <span class="inline-block w-2 h-2 rounded-full bg-slate-200" title="Unpaid"></span>
+          {% endif %}
+        </td>
         <td class="px-5 py-3">
           <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition justify-end">
             <a href="{% url 'ui:entry_edit' entry.id %}"
                class="text-xs text-brand-600 hover:underline">Edit</a>
+            {% if not entry.is_paid %}
             <button hx-delete="{% url 'ui:entry_delete' entry.id %}"
                     hx-target="#entry-row-{{ entry.id }}"
                     hx-swap="outerHTML swap:0.3s"
                     hx-confirm="Delete this entry?"
                     class="text-xs text-red-500 hover:underline">Delete</button>
+            {% endif %}
           </div>
         </td>
       </tr>

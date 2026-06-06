@@ -1,6 +1,6 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import Client, Project, TimeEntry, Tag, UserProfile, WeeklyReport
+from .models import Client, Project, TimeEntry, Tag, UserProfile, WeeklyReport, Payment
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -76,9 +76,10 @@ class TimeEntrySerializer(serializers.ModelSerializer):
             "id", "user", "project", "project_name", "client_name",
             "date", "hours", "description", "tags", "tag_ids",
             "is_billable", "hourly_rate", "amount",
+            "is_paid", "paid_at", "payment",
             "started_at", "stopped_at", "created_at", "updated_at",
         ]
-        read_only_fields = ["user", "created_at", "updated_at", "amount"]
+        read_only_fields = ["user", "created_at", "updated_at", "amount", "is_paid", "paid_at", "payment"]
 
     def create(self, validated_data):
         validated_data["user"] = self.context["request"].user
@@ -120,3 +121,75 @@ class WeeklyReportSerializer(serializers.ModelSerializer):
             "sent_at", "email_provider", "recipient_email", "attachment_name",
         ]
         read_only_fields = fields
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    paid_to = UserSerializer(read_only=True)
+    paid_to_id = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(), source="paid_to", write_only=True
+    )
+    paid_by = UserSerializer(read_only=True)
+    entry_ids = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=TimeEntry.objects.all(),
+        source="entries", write_only=True, required=False,
+    )
+    entries_summary = serializers.SerializerMethodField()
+    document_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Payment
+        fields = [
+            "id", "paid_to", "paid_to_id", "paid_by",
+            "amount", "payment_date", "reference", "status", "notes",
+            "document", "document_url", "entry_ids", "entries_summary",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["paid_by", "created_at", "updated_at", "document_url"]
+        extra_kwargs = {"document": {"write_only": True, "required": False}}
+
+    def get_document_url(self, obj):
+        if obj.document:
+            request = self.context.get("request")
+            return request.build_absolute_uri(obj.document.url) if request else obj.document.url
+        return None
+
+    def get_entries_summary(self, obj):
+        return [
+            {
+                "id": str(e.id),
+                "date": e.date,
+                "hours": float(e.hours),
+                "amount": float(e.amount),
+                "description": e.description,
+                "project": e.project.name,
+            }
+            for e in obj.entries.filter(is_deleted=False).select_related("project")
+        ]
+
+    def create(self, validated_data):
+        entries = validated_data.pop("entries", [])
+        validated_data["paid_by"] = self.context["request"].user
+        payment = super().create(validated_data)
+        if entries:
+            payment.entries.set(entries)
+            payment.entries.filter(is_deleted=False).update(
+                is_paid=True, paid_at=payment.payment_date, payment=payment
+            )
+        return payment
+
+    def update(self, instance, validated_data):
+        entries = validated_data.pop("entries", None)
+        payment = super().update(instance, validated_data)
+        if entries is not None:
+            old_entry_ids = set(payment.entries.values_list("id", flat=True))
+            new_entry_ids = {e.id for e in entries}
+            # Unmark removed entries
+            removed = old_entry_ids - new_entry_ids
+            TimeEntry.objects.filter(id__in=removed).update(
+                is_paid=False, paid_at=None, payment=None
+            )
+            payment.entries.set(entries)
+            payment.entries.filter(is_deleted=False).update(
+                is_paid=True, paid_at=payment.payment_date, payment=payment
+            )
+        return payment

@@ -1,0 +1,270 @@
+{% extends "ui/base.html" %}
+{% block title %}Record Payment{% endblock %}
+{% block page_title %}Record Payment{% endblock %}
+
+{% block extra_head %}
+{{ entries_for_js|json_script:"entries-json" }}
+<script>
+function paymentForm() {
+  const entries = JSON.parse(document.getElementById('entries-json').textContent || '[]');
+  return {
+    entries,
+    selectedEntries: {},
+    search: '',
+    filterProject: '',
+    filterDateFrom: '',
+    filterDateTo: '',
+
+    isVisible(e) {
+      if (this.filterProject && e.project !== this.filterProject) return false;
+      if (this.filterDateFrom && e.date < this.filterDateFrom) return false;
+      if (this.filterDateTo && e.date > this.filterDateTo) return false;
+      if (this.search) {
+        const q = this.search.toLowerCase();
+        if (!e.project.toLowerCase().includes(q) && !e.description.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    },
+
+    get visibleEntries() { return this.entries.filter(e => this.isVisible(e)); },
+
+    selectAllVisible() {
+      this.visibleEntries.forEach(e => { this.selectedEntries[e.id] = e.amount; });
+    },
+
+    clearSelection() {
+      const reset = {};
+      this.entries.forEach(e => { reset[e.id] = 0; });
+      this.selectedEntries = reset;
+    },
+
+    clearFilters() {
+      this.search = '';
+      this.filterProject = '';
+      this.filterDateFrom = '';
+      this.filterDateTo = '';
+    },
+
+    get selectedAmount() {
+      return Object.values(this.selectedEntries).reduce((s, v) => s + v, 0).toFixed(2);
+    },
+
+    get selectedCount() {
+      return Object.values(this.selectedEntries).filter(v => v > 0).length;
+    },
+
+    get visibleCount() {
+      return this.visibleEntries.length;
+    },
+
+    get hasActiveFilters() {
+      return !!(this.search || this.filterProject || this.filterDateFrom || this.filterDateTo);
+    }
+  };
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl" x-data="paymentForm()">
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+
+      <!-- ── Left: payment fields ───────────────────────────────────────── -->
+      <div class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100">
+
+        <div class="px-5 py-4">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Payment Details</p>
+        </div>
+
+        <div class="px-5 py-4 space-y-4">
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Pay To</label>
+            <select name="paid_to" required
+                    class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+              <option value="">— Select person —</option>
+              {% for user in users %}
+              <option value="{{ user.pk }}" {% if form.paid_to.value == user.pk|stringformat:"s" %}selected{% endif %}>
+                {{ user.get_full_name|default:user.email }}
+              </option>
+              {% endfor %}
+            </select>
+            {% if form.paid_to.errors %}<p class="text-red-500 text-xs mt-1">{{ form.paid_to.errors|join:", " }}</p>{% endif %}
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Amount ($)</label>
+            <input type="number" name="amount" step="0.01" min="0" required
+                   value="{{ form.amount.value|default:'' }}" placeholder="0.00"
+                   class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            <p class="text-xs text-slate-400 mt-1">
+              Entries total: <span class="font-semibold text-green-700" x-text="'$' + selectedAmount"></span>
+              <span x-show="selectedCount > 0" class="ml-1" x-text="'(' + selectedCount + ' selected)'"></span>
+            </p>
+            {% if form.amount.errors %}<p class="text-red-500 text-xs mt-1">{{ form.amount.errors|join:", " }}</p>{% endif %}
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Payment Date</label>
+            <input type="date" name="payment_date" required
+                   value="{{ form.payment_date.value|default:'' }}"
+                   class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            {% if form.payment_date.errors %}<p class="text-red-500 text-xs mt-1">{{ form.payment_date.errors|join:", " }}</p>{% endif %}
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Reference <span class="font-normal text-slate-400">(optional)</span></label>
+            <input type="text" name="reference" maxlength="255"
+                   value="{{ form.reference.value|default:'' }}" placeholder="Invoice #, transfer ID…"
+                   class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Status</label>
+            <select name="status"
+                    class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+              {% for val, label in form.fields.status.choices %}
+              <option value="{{ val }}" {% if form.status.value == val %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Notes <span class="font-normal text-slate-400">(optional)</span></label>
+            <textarea name="notes" rows="3" placeholder="Any additional notes…"
+                      class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500">{{ form.notes.value|default:'' }}</textarea>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1">Supporting Document <span class="font-normal text-slate-400">(optional)</span></label>
+            <input type="file" name="document" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx"
+                   class="block w-full text-sm text-slate-500
+                          file:mr-3 file:py-1.5 file:px-3
+                          file:rounded-md file:border file:border-slate-300
+                          file:text-sm file:text-slate-700 file:bg-white
+                          hover:file:bg-slate-50 file:cursor-pointer" />
+            <p class="text-xs text-slate-400 mt-1">PDF, image, or spreadsheet</p>
+          </div>
+
+        </div>
+
+        <div class="px-5 py-4 flex items-center gap-3">
+          <button type="submit"
+                  class="px-5 py-2 bg-brand-600 text-white text-sm font-semibold rounded-lg hover:bg-brand-700 transition">
+            Record Payment
+          </button>
+          <a href="{% url 'ui:payment_list' %}"
+             class="px-4 py-2 text-sm text-slate-500 hover:text-slate-700 transition">Cancel</a>
+        </div>
+      </div>
+
+      <!-- ── Right: entry selection ─────────────────────────────────────── -->
+      <div class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100">
+
+        <!-- Header -->
+        <div class="px-5 py-4">
+          <div class="flex items-center justify-between">
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Unpaid Entries</p>
+            <span class="text-xs text-slate-400">
+              <span x-text="visibleCount"></span> / {{ total_unpaid }}
+              <span x-show="selectedCount > 0" class="ml-2 font-semibold text-brand-600"
+                    x-text="selectedCount + ' selected · $' + selectedAmount"></span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="px-5 py-3 space-y-2 bg-slate-50">
+          <!-- Search -->
+          <input type="text" x-model.debounce.250ms="search"
+                 placeholder="Search project or description…"
+                 class="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500" />
+
+          <!-- Project -->
+          <select x-model="filterProject"
+                  class="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <option value="">All Projects</option>
+            {% for project in unique_projects %}
+            <option value="{{ project }}">{{ project }}</option>
+            {% endfor %}
+          </select>
+
+          <!-- Date range -->
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-xs text-slate-400 mb-0.5">From</label>
+              <input type="date" x-model="filterDateFrom"
+                     class="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-0.5">To</label>
+              <input type="date" x-model="filterDateTo"
+                     class="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            </div>
+          </div>
+
+          <!-- Bulk actions -->
+          <div class="flex items-center gap-3 pt-0.5">
+            <button type="button" @click="selectAllVisible()"
+                    class="text-xs font-medium text-brand-600 hover:text-brand-700 hover:underline">Select all visible</button>
+            <span class="text-slate-300 select-none">|</span>
+            <button type="button" @click="clearSelection()"
+                    class="text-xs text-slate-500 hover:text-slate-700 hover:underline">Clear</button>
+            <template x-if="hasActiveFilters">
+              <span class="flex items-center gap-3">
+                <span class="text-slate-300 select-none">|</span>
+                <button type="button" @click="clearFilters()"
+                        class="text-xs text-slate-500 hover:text-slate-700 hover:underline">Reset filters</button>
+              </span>
+            </template>
+          </div>
+        </div>
+
+        <!-- Entry rows -->
+        <div class="overflow-y-auto" style="max-height: 400px;">
+          {% if total_unpaid == 0 %}
+          <div class="py-12 text-center text-slate-400">
+            <p class="text-sm">No unpaid entries found.</p>
+          </div>
+          {% else %}
+          <div class="divide-y divide-slate-50">
+            <template x-for="entry in entries" :key="entry.id">
+              <label x-show="
+                  (!filterProject || entry.project === filterProject) &&
+                  (!filterDateFrom || entry.date >= filterDateFrom) &&
+                  (!filterDateTo || entry.date <= filterDateTo) &&
+                  (!search || entry.project.toLowerCase().includes(search.toLowerCase()) || entry.description.toLowerCase().includes(search.toLowerCase()))"
+                     class="flex items-center gap-3 px-5 py-3 cursor-pointer transition-colors"
+                     :class="(selectedEntries[entry.id] || 0) > 0 ? 'bg-brand-50' : 'hover:bg-slate-50'">
+                <input type="checkbox" name="entry_ids" :value="entry.id"
+                       style="width:16px;height:16px;flex-shrink:0;accent-color:#2563eb;"
+                       :checked="(selectedEntries[entry.id] || 0) > 0"
+                       @change="selectedEntries[entry.id] = $event.target.checked ? entry.amount : 0" />
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-baseline justify-between gap-3">
+                    <span class="text-sm font-medium text-slate-800 truncate" x-text="entry.project"></span>
+                    <span class="text-sm font-mono text-green-700 shrink-0" x-text="'$' + entry.amount.toFixed(2)"></span>
+                  </div>
+                  <p class="text-xs text-slate-400 mt-0.5 truncate"
+                     x-text="entry.date + ' · ' + entry.hours.toFixed(2) + 'h' + (entry.description ? ' · ' + entry.description : '')"></p>
+                </div>
+              </label>
+            </template>
+          </div>
+
+          <div x-show="visibleCount === 0" class="py-12 text-center text-slate-400">
+            <p class="text-sm">No entries match the filters.</p>
+            <button type="button" @click="clearFilters()"
+                    class="text-xs text-brand-600 hover:underline mt-1">Reset filters</button>
+          </div>
+          {% endif %}
+        </div>
+
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}

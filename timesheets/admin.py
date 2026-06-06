@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.db.models import Sum
-from .models import Client, Project, TimeEntry, Tag, UserProfile, WeeklyReport
+from .models import Client, Project, TimeEntry, Tag, UserProfile, WeeklyReport, Payment
 
 
 @admin.register(UserProfile)
@@ -96,6 +96,41 @@ class TimeEntryAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         return self.model.all_objects.all()
+
+
+class PaymentEntryInline(admin.TabularInline):
+    model = Payment.entries.through
+    extra = 0
+    verbose_name = "Time Entry"
+    verbose_name_plural = "Covered Time Entries"
+
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = [
+        "short_id", "paid_to", "paid_by", "amount", "payment_date",
+        "status", "reference", "document_link", "entry_count", "created_at",
+    ]
+    list_filter = ["status", "payment_date"]
+    search_fields = ["paid_to__email", "paid_by__email", "reference", "notes"]
+    readonly_fields = ["created_at", "updated_at", "document_link"]
+    date_hierarchy = "payment_date"
+    raw_id_fields = ["paid_to", "paid_by"]
+    filter_horizontal = ["entries"]
+
+    def short_id(self, obj):
+        return str(obj.id)[:8].upper()
+    short_id.short_description = "ID"
+
+    def document_link(self, obj):
+        if obj.document:
+            return format_html('<a href="{}" target="_blank">Download ↗</a>', obj.document.url)
+        return "—"
+    document_link.short_description = "Document"
+
+    def entry_count(self, obj):
+        return obj.entries.count()
+    entry_count.short_description = "Entries"
 
 
 @admin.register(WeeklyReport)

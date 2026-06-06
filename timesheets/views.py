@@ -13,11 +13,11 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
 from .filters import TimeEntryFilter, ProjectFilter
-from .models import Client, Project, TimeEntry, Tag, UserProfile, WeeklyReport
+from .models import Client, Project, TimeEntry, Tag, UserProfile, WeeklyReport, Payment
 from .serializers import (
     ClientSerializer, ProjectSerializer, TimeEntrySerializer,
     TimeEntryBulkSerializer, TagSerializer, UserProfileSerializer,
-    WeeklySummarySerializer, WeeklyReportSerializer,
+    WeeklySummarySerializer, WeeklyReportSerializer, PaymentSerializer,
 )
 from .services.excel_export import build_weekly_excel
 from .services.email_service import send_weekly_report
@@ -228,3 +228,43 @@ class WeeklyReportListView(generics.ListAPIView):
         if user.is_staff:
             return WeeklyReport.objects.select_related("user").all()
         return WeeklyReport.objects.filter(user=user)
+
+
+class PaymentViewSet(viewsets.ModelViewSet):
+    serializer_class = PaymentSerializer
+    permission_classes = [IsAuthenticated]
+    search_fields = ["reference", "notes", "paid_to__email"]
+    ordering_fields = ["payment_date", "amount", "created_at"]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = Payment.objects.select_related("paid_to", "paid_by").prefetch_related("entries")
+        if not user.is_staff:
+            qs = qs.filter(paid_to=user)
+        return qs
+
+    def get_parsers(self):
+        # Accept multipart (file upload) and JSON
+        from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+        return [MultiPartParser(), FormParser(), JSONParser()]
+
+    def destroy(self, request, *args, **kwargs):
+        payment = self.get_object()
+        # Unmark all covered entries before deleting
+        payment.entries.filter(is_deleted=False).update(
+            is_paid=False, paid_at=None, payment=None
+        )
+        payment.soft_delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=["get"], url_path="unpaid-entries")
+    def unpaid_entries(self, request):
+        """List all unpaid entries for the current user — used to build payment form."""
+        user = request.user
+        qs = (
+            TimeEntry.objects
+            .filter(user=user, is_paid=False, is_deleted=False)
+            .select_related("project", "project__client")
+            .order_by("-date")
+        )
+        return Response(TimeEntrySerializer(qs, many=True, context={"request": request}).data)

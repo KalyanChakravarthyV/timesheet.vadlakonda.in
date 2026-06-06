@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en" x-data="{ sidebarOpen: false }">
 <head>
@@ -5,8 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}Timesheet{% endblock %} — {{ company_name }}</title>
 
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind CSS (self-hosted) — config must be set after the script;
+       the CDN creates window.tailwind as a new Proxy on load, wiping pre-set values -->
+  <script src="{% static 'js/tailwind.js' %}"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -20,9 +22,9 @@
   </script>
 
   <!-- HTMX -->
-  <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
-  <!-- Alpine.js -->
-  <script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
+  <script src="{% static 'js/htmx.min.js' %}" defer></script>
+  <!-- Alpine.js (defer so it initialises after DOM is ready) -->
+  <script src="{% static 'js/alpine.min.js' %}" defer></script>
 
   <style>
     [x-cloak] { display: none !important; }

@@ -1,19 +1,22 @@
 import json
+import mimetypes
+import os
 from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView, LogoutView
 from django.db.models import Sum
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
-from timesheets.models import Client, Project, Tag, TimeEntry, WeeklyReport
+from timesheets.models import Client, Payment, Project, Tag, TimeEntry, WeeklyReport
 from timesheets.services.email_service import send_weekly_report
 from timesheets.services.excel_export import build_weekly_excel
-from .forms import ClientForm, ProjectForm, TimeEntryForm
+from .forms import ClientForm, PaymentForm, ProjectForm, TimeEntryForm
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -415,3 +418,158 @@ def weekly_send(request):
     if result["success"]:
         return JsonResponse({"message": "Sent!", "provider": result["provider"]})
     return JsonResponse({"error": result.get("error", "Failed to send.")}, status=500)
+
+
+# ── Payments ──────────────────────────────────────────────────────────────────
+
+@login_required
+def payment_list(request):
+    if request.user.is_staff:
+        payments = Payment.objects.select_related("paid_to", "paid_by").all()
+    else:
+        payments = Payment.objects.select_related("paid_to", "paid_by").filter(paid_to=request.user)
+    total_paid = sum(p.amount for p in payments)
+    return render(request, "ui/payments.html", {
+        **_context_base(request),
+        "payments": payments,
+        "total_paid": total_paid,
+    })
+
+
+@login_required
+def payment_add(request):
+    from django.conf import settings
+
+    if request.user.is_staff:
+        users = User.objects.filter(is_active=True).order_by("first_name", "email")
+        target_user_id = request.GET.get("for_user") or request.POST.get("paid_to")
+        if target_user_id:
+            try:
+                target_user_id = int(target_user_id)
+                unpaid_entries = (
+                    TimeEntry.objects
+                    .filter(user_id=target_user_id, is_paid=False, is_deleted=False)
+                    .select_related("project")
+                    .order_by("-date")
+                )
+            except (ValueError, TypeError):
+                unpaid_entries = TimeEntry.objects.none()
+        else:
+            unpaid_entries = (
+                TimeEntry.objects
+                .filter(is_paid=False, is_deleted=False)
+                .select_related("project", "user")
+                .order_by("-date")
+            )
+    else:
+        users = User.objects.filter(pk=request.user.pk)
+        unpaid_entries = (
+            TimeEntry.objects
+            .filter(user=request.user, is_paid=False, is_deleted=False)
+            .select_related("project")
+            .order_by("-date")
+        )
+
+    entries_list = list(unpaid_entries)
+    entry_choices = [
+        (
+            str(e.id),
+            f"{e.date} | {e.project.name} | {e.hours}h | ${e.amount:.2f}"
+            + (f" | {e.description[:40]}" if e.description else ""),
+        )
+        for e in entries_list
+    ]
+    entries_for_js = [
+        {
+            "id": str(e.id),
+            "project": e.project.name,
+            "date": e.date.isoformat(),
+            "description": e.description or "",
+            "hours": float(e.hours),
+            "amount": float(e.amount),
+        }
+        for e in entries_list
+    ]
+    unique_projects = sorted({e["project"] for e in entries_for_js})
+    unpaid_entries_json = json.dumps(entries_for_js)
+
+    if request.method == "POST":
+        form = PaymentForm(request.POST, request.FILES)
+        form.fields["entry_ids"].choices = entry_choices
+        if form.is_valid():
+            entry_ids = form.cleaned_data.get("entry_ids", [])
+            entries_qs = TimeEntry.objects.filter(id__in=entry_ids, is_deleted=False)
+            payment = Payment.objects.create(
+                paid_by=request.user,
+                paid_to=form.cleaned_data["paid_to"],
+                amount=form.cleaned_data["amount"],
+                payment_date=form.cleaned_data["payment_date"],
+                reference=form.cleaned_data.get("reference", ""),
+                status=form.cleaned_data["status"],
+                notes=form.cleaned_data.get("notes", ""),
+                document=form.cleaned_data.get("document"),
+            )
+            if entry_ids:
+                payment.entries.set(entries_qs)
+                entries_qs.update(
+                    is_paid=True,
+                    paid_at=payment.payment_date,
+                    payment=payment,
+                )
+            messages.success(request, f"Payment of ${payment.amount} recorded successfully.")
+            return redirect("ui:payment_detail", pk=payment.pk)
+    else:
+        form = PaymentForm(initial={"payment_date": date.today(), "status": "confirmed"})
+        form.fields["entry_ids"].choices = entry_choices
+
+    return render(request, "ui/payment_form.html", {
+        **_context_base(request),
+        "form": form,
+        "users": users,
+        "entries_for_js": entries_for_js,
+        "unique_projects": unique_projects,
+        "total_unpaid": len(entries_list),
+    })
+
+
+@login_required
+def payment_detail(request, pk):
+    if request.user.is_staff:
+        payment = get_object_or_404(Payment, pk=pk)
+    else:
+        payment = get_object_or_404(Payment, pk=pk, paid_to=request.user)
+    entries = payment.entries.filter(is_deleted=False).select_related("project")
+    total_hours = sum(e.hours for e in entries)
+    total_amount = sum(e.amount for e in entries)
+    return render(request, "ui/payment_detail.html", {
+        **_context_base(request),
+        "payment": payment,
+        "entries": entries,
+        "total_hours": total_hours,
+        "total_amount": total_amount,
+    })
+
+
+@login_required
+def payment_document(request, pk):
+    from django.conf import settings
+    if request.user.is_staff:
+        payment = get_object_or_404(Payment, pk=pk)
+    else:
+        payment = get_object_or_404(Payment, pk=pk, paid_to=request.user)
+
+    if not payment.document:
+        raise Http404
+
+    file_path = os.path.join(settings.MEDIA_ROOT, payment.document.name)
+    if not os.path.exists(file_path):
+        raise Http404
+
+    mime_type, _ = mimetypes.guess_type(file_path)
+    mime_type = mime_type or "application/octet-stream"
+    filename = os.path.basename(payment.document.name)
+
+    with open(file_path, "rb") as f:
+        response = HttpResponse(f.read(), content_type=mime_type)
+    response["Content-Disposition"] = f'inline; filename="{filename}"'
+    return response
