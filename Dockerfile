@@ -19,4 +19,6 @@ subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--no-cache-dir']
 
 COPY . .
 
+RUN python manage.py collectstatic --noinput
+
 EXPOSE 8000
