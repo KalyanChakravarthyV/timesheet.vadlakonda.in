@@ -27,9 +27,10 @@ def api_root(request):
 
 
 urlpatterns = [
-    path("", api_root),
     path("admin/", admin.site.urls),
     path("api/", include("timesheets.urls")),
+    path("api/info/", api_root),
+    path("", include("ui.urls")),
 ]
 
 if settings.DEBUG:

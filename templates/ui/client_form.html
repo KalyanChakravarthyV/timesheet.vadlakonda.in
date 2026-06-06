@@ -1,0 +1,44 @@
+{% extends "ui/base.html" %}
+{% block title %}{% if client %}Edit Client{% else %}New Client{% endif %}{% endblock %}
+{% block page_title %}{% if client %}Edit Client{% else %}New Client{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-xl">
+  <div class="bg-white rounded-xl border border-slate-200 p-6">
+    <form method="post" class="space-y-5">
+      {% csrf_token %}
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Client Name <span class="text-red-500">*</span></label>
+        <input type="text" name="name" value="{{ form.name.value|default:'' }}" required
+               class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Contact Person</label>
+        <input type="text" name="contact_person" value="{{ form.contact_person.value|default:'' }}"
+               class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
+        <input type="email" name="email" value="{{ form.email.value|default:'' }}"
+               class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Address</label>
+        <textarea name="address" rows="2"
+                  class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none">{{ form.address.value|default:'' }}</textarea>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Notes</label>
+        <textarea name="notes" rows="2"
+                  class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none">{{ form.notes.value|default:'' }}</textarea>
+      </div>
+      <div class="flex items-center gap-3 pt-2">
+        <button type="submit" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-lg transition">
+          {% if client %}Save Changes{% else %}Create Client{% endif %}
+        </button>
+        <a href="{% url 'ui:client_list' %}" class="px-5 py-2.5 border border-slate-300 text-slate-600 text-sm rounded-lg hover:bg-slate-50 transition">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

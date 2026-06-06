@@ -1,0 +1,51 @@
+{% extends "ui/base.html" %}
+{% block title %}Clients{% endblock %}
+{% block page_title %}Clients{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+  <p class="text-sm text-slate-500">{{ clients|length }} client{{ clients|length|pluralize }}</p>
+  <a href="{% url 'ui:client_add' %}"
+     class="px-4 py-2 bg-brand-600 text-white text-sm font-semibold rounded-lg hover:bg-brand-700 transition">+ New Client</a>
+</div>
+
+<div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+  {% if clients %}
+  <table class="w-full text-sm">
+    <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+      <tr>
+        <th class="px-5 py-3 text-left">Client</th>
+        <th class="px-5 py-3 text-left">Contact</th>
+        <th class="px-5 py-3 text-left">Email</th>
+        <th class="px-5 py-3 text-center">Projects</th>
+        <th class="px-5 py-3"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100">
+      {% for client in clients %}
+      <tr class="hover:bg-slate-50 transition group">
+        <td class="px-5 py-3 font-medium text-slate-800">{{ client.name }}</td>
+        <td class="px-5 py-3 text-slate-500">{{ client.contact_person|default:"—" }}</td>
+        <td class="px-5 py-3 text-slate-500">
+          {% if client.email %}<a href="mailto:{{ client.email }}" class="hover:text-brand-600">{{ client.email }}</a>{% else %}—{% endif %}
+        </td>
+        <td class="px-5 py-3 text-center">
+          <span class="px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full text-xs font-medium">{{ client.project_count }}</span>
+        </td>
+        <td class="px-5 py-3">
+          <a href="{% url 'ui:client_edit' client.id %}"
+             class="text-xs text-brand-600 hover:underline opacity-0 group-hover:opacity-100 transition">Edit</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="py-16 text-center text-slate-400">
+    <p class="text-4xl mb-3">🏢</p>
+    <p class="text-sm mb-3">No clients yet.</p>
+    <a href="{% url 'ui:client_add' %}" class="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">Add first client</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

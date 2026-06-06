@@ -1,0 +1,112 @@
+{% extends "ui/base.html" %}
+{% block title %}{% if entry %}Edit Entry{% else %}Log Time{% endif %}{% endblock %}
+{% block page_title %}{% if entry %}Edit Entry{% else %}Log Time{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+  <div class="bg-white rounded-xl border border-slate-200 p-6">
+
+    <form method="post" class="space-y-5">
+      {% csrf_token %}
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Date <span class="text-red-500">*</span></label>
+          <input type="date" name="date" value="{{ form.date.value|default:today }}" required
+                 class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          {% if form.date.errors %}<p class="text-xs text-red-500 mt-1">{{ form.date.errors.0 }}</p>{% endif %}
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Hours <span class="text-red-500">*</span></label>
+          <input type="number" name="hours" step="0.25" min="0.25" max="24"
+                 value="{{ form.hours.value|default:'' }}" placeholder="2.5" required
+                 class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          {% if form.hours.errors %}<p class="text-xs text-red-500 mt-1">{{ form.hours.errors.0 }}</p>{% endif %}
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Project <span class="text-red-500">*</span></label>
+        <select name="project" required
+                class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Select project…</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {% if form.project.value|stringformat:"s" == p.id|stringformat:"s" %}selected{% endif %}>
+            {{ p.name }}{% if p.client %} — {{ p.client.name }}{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        {% if form.project.errors %}<p class="text-xs text-red-500 mt-1">{{ form.project.errors.0 }}</p>{% endif %}
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-1">Description</label>
+        <textarea name="description" rows="3" placeholder="What did you work on?"
+                  class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none">{{ form.description.value|default:'' }}</textarea>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Hourly Rate (override)</label>
+          <input type="number" name="hourly_rate" step="0.01" min="0"
+                 value="{{ form.hourly_rate.value|default:'' }}" placeholder="Inherited from project"
+                 class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+        </div>
+        <div x-data="{ billable: {{ form.is_billable.value|default:'true'|lower }} }" class="flex items-end pb-0.5">
+          <label class="flex items-center gap-3 cursor-pointer select-none">
+            <div class="relative">
+              <input type="checkbox" name="is_billable" class="sr-only" x-model="billable"
+                     {% if form.is_billable.value != False %}checked{% endif %} />
+              <div class="w-10 h-6 rounded-full transition"
+                   :class="billable ? 'bg-brand-600' : 'bg-slate-300'"></div>
+              <div class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform"
+                   :class="billable ? 'translate-x-4' : ''"></div>
+            </div>
+            <span class="text-sm font-medium text-slate-700">Billable</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Tags -->
+      {% if tags %}
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-2">Tags</label>
+        <div class="flex flex-wrap gap-2">
+          {% for tag in tags %}
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" name="tags" value="{{ tag.id }}"
+                   {% if tag.id in selected_tag_ids %}checked{% endif %}
+                   class="rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
+            <span class="text-sm px-2 py-0.5 rounded-full font-medium"
+                  style="background:{{ tag.color }}22;color:{{ tag.color }}">{{ tag.name }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="flex items-center gap-3 pt-2">
+        <button type="submit"
+                class="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-lg transition">
+          {% if entry %}Save Changes{% else %}Log Time{% endif %}
+        </button>
+        <a href="{% url 'ui:entry_list' %}"
+           class="px-5 py-2.5 border border-slate-300 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 transition">
+          Cancel
+        </a>
+        {% if entry %}
+        <button type="button"
+                hx-delete="{% url 'ui:entry_delete' entry.id %}"
+                hx-push-url="{% url 'ui:entry_list' %}"
+                hx-target="body"
+                hx-swap="outerHTML"
+                hx-confirm="Delete this entry?"
+                class="ml-auto px-5 py-2.5 text-red-600 text-sm font-medium hover:bg-red-50 rounded-lg transition">
+          Delete
+        </button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

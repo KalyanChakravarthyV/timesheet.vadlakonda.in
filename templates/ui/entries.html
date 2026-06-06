@@ -1,0 +1,107 @@
+{% extends "ui/base.html" %}
+{% block title %}Time Entries{% endblock %}
+{% block page_title %}Time Entries{% endblock %}
+
+{% block content %}
+<!-- Toolbar -->
+<div class="flex flex-wrap items-center gap-3 mb-6">
+  <!-- Date filters -->
+  <form method="get" class="flex items-center gap-2">
+    <input type="date" name="date_from" value="{{ request.GET.date_from }}"
+           class="text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+    <span class="text-slate-400 text-sm">to</span>
+    <input type="date" name="date_to" value="{{ request.GET.date_to }}"
+           class="text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+    <select name="project" class="text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500">
+      <option value="">All Projects</option>
+      {% for p in projects %}
+      <option value="{{ p.id }}" {% if request.GET.project == p.id|slugify %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="px-4 py-2 bg-slate-700 text-white text-sm rounded-lg hover:bg-slate-800 transition">Filter</button>
+    <a href="{% url 'ui:entry_list' %}" class="text-sm text-slate-500 hover:text-slate-700">Clear</a>
+  </form>
+
+  <div class="ml-auto">
+    <a href="{% url 'ui:entry_add' %}"
+       class="px-4 py-2 bg-brand-600 text-white text-sm font-semibold rounded-lg hover:bg-brand-700 transition">+ Log Time</a>
+  </div>
+</div>
+
+<!-- Summary bar -->
+{% if entries %}
+<div class="bg-brand-50 border border-brand-100 rounded-xl px-5 py-3 mb-5 flex gap-8 text-sm">
+  <span class="text-slate-600">Showing <strong class="text-slate-800">{{ entries|length }}</strong> entries</span>
+  <span class="text-slate-600">Total hours: <strong class="text-brand-700">{{ total_hours|floatformat:2 }}h</strong></span>
+  <span class="text-slate-600">Total amount: <strong class="text-green-700">${{ total_amount|floatformat:2 }}</strong></span>
+</div>
+{% endif %}
+
+<!-- Entries table -->
+<div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+  {% if entries %}
+  <table class="w-full text-sm" id="entries-table">
+    <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+      <tr>
+        <th class="px-5 py-3 text-left">Date</th>
+        <th class="px-5 py-3 text-left">Project</th>
+        <th class="px-5 py-3 text-left">Description</th>
+        <th class="px-5 py-3 text-right">Hours</th>
+        <th class="px-5 py-3 text-right">Amount</th>
+        <th class="px-5 py-3 text-center">Billable</th>
+        <th class="px-5 py-3"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100">
+      {% for entry in entries %}
+      <tr id="entry-row-{{ entry.id }}" class="hover:bg-slate-50 transition group">
+        <td class="px-5 py-3 text-slate-500 whitespace-nowrap">{{ entry.date|date:"D, d M Y" }}</td>
+        <td class="px-5 py-3">
+          <span class="font-medium text-slate-800">{{ entry.project.name }}</span>
+          {% if entry.project.client %}
+          <span class="text-slate-400 text-xs block">{{ entry.project.client.name }}</span>
+          {% endif %}
+        </td>
+        <td class="px-5 py-3 text-slate-600 max-w-xs">
+          <span class="truncate block">{{ entry.description|default:"—" }}</span>
+          {% if entry.tags.exists %}
+          <div class="flex flex-wrap gap-1 mt-1">
+            {% for tag in entry.tags.all %}
+            <span class="px-1.5 py-0.5 text-xs rounded font-medium" style="background:{{ tag.color }}22;color:{{ tag.color }}">{{ tag.name }}</span>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </td>
+        <td class="px-5 py-3 text-right font-mono">{{ entry.hours|floatformat:2 }}h</td>
+        <td class="px-5 py-3 text-right font-mono text-green-700">${{ entry.amount|floatformat:2 }}</td>
+        <td class="px-5 py-3 text-center">
+          {% if entry.is_billable %}
+          <span class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+          {% else %}
+          <span class="inline-block w-2 h-2 rounded-full bg-slate-300"></span>
+          {% endif %}
+        </td>
+        <td class="px-5 py-3">
+          <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition justify-end">
+            <a href="{% url 'ui:entry_edit' entry.id %}"
+               class="text-xs text-brand-600 hover:underline">Edit</a>
+            <button hx-delete="{% url 'ui:entry_delete' entry.id %}"
+                    hx-target="#entry-row-{{ entry.id }}"
+                    hx-swap="outerHTML swap:0.3s"
+                    hx-confirm="Delete this entry?"
+                    class="text-xs text-red-500 hover:underline">Delete</button>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="px-5 py-16 text-center text-slate-400">
+    <p class="text-4xl mb-3">📭</p>
+    <p class="text-sm mb-3">No time entries found.</p>
+    <a href="{% url 'ui:entry_add' %}" class="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">Log your first entry</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
