@@ -108,6 +108,19 @@
           <textarea name="description" rows="2" placeholder="What did you work on?"
                     class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"></textarea>
         </div>
+        <div x-data="{ billable: true }">
+          <label class="block text-xs font-medium text-slate-600 mb-1">Billable</label>
+          <label class="flex items-center gap-3 cursor-pointer select-none">
+            <div class="relative">
+              <input type="checkbox" name="is_billable" class="sr-only" x-model="billable" checked />
+              <div class="w-10 h-6 rounded-full transition"
+                   :class="billable ? 'bg-brand-600' : 'bg-slate-300'"></div>
+              <div class="absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform"
+                   :class="billable ? 'translate-x-4' : ''"></div>
+            </div>
+            <span class="text-sm font-medium text-slate-700" x-text="billable ? 'Billable' : 'Non-billable'"></span>
+          </label>
+        </div>
         <button type="submit"
                 class="w-full bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold py-2 rounded-lg transition">
           Log Time
@@ -144,3 +157,4 @@
   </div>
 </div>
 {% endblock %}
+

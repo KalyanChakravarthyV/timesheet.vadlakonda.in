@@ -3,126 +3,240 @@
 {% block page_title %}Time Entries{% endblock %}
 
 {% block content %}
-<!-- Toolbar -->
-<div class="flex flex-wrap items-center gap-3 mb-6">
-  <!-- Date filters -->
-  <form method="get" class="flex items-center gap-2">
-    <input type="date" name="date_from" value="{{ request.GET.date_from }}"
-           class="text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
-    <span class="text-slate-400 text-sm">to</span>
-    <input type="date" name="date_to" value="{{ request.GET.date_to }}"
-           class="text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
-    <select name="project" class="text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500">
-      <option value="">All Projects</option>
-      {% for p in projects %}
-      <option value="{{ p.id }}" {% if request.GET.project == p.id|slugify %}selected{% endif %}>{{ p.name }}</option>
-      {% endfor %}
-    </select>
-    <button type="submit" class="px-4 py-2 bg-slate-700 text-white text-sm rounded-lg hover:bg-slate-800 transition">Filter</button>
-    <a href="{% url 'ui:entry_list' %}" class="text-sm text-slate-500 hover:text-slate-700">Clear</a>
-  </form>
+<div x-data="{ tab: 'all' }">
 
-  <div class="ml-auto">
-    <a href="{% url 'ui:entry_add' %}"
-       class="px-4 py-2 bg-brand-600 text-white text-sm font-semibold rounded-lg hover:bg-brand-700 transition">+ Log Time</a>
+  <!-- Tab navigation -->
+  <div class="flex gap-1 border-b border-slate-200 mb-6">
+    <button @click="tab='all'"
+            :class="tab==='all' ? 'border-b-2 border-brand-600 text-brand-700 font-semibold' : 'text-slate-500 hover:text-slate-700'"
+            class="px-5 py-3 text-sm transition -mb-px">All Entries</button>
+    <button @click="tab='week'"
+            :class="tab==='week' ? 'border-b-2 border-brand-600 text-brand-700 font-semibold' : 'text-slate-500 hover:text-slate-700'"
+            class="px-5 py-3 text-sm transition -mb-px">
+      This Week
+      <span class="ml-1.5 text-xs font-normal opacity-60">{{ week_start|date:"d M" }} – {{ week_end|date:"d M" }}</span>
+    </button>
   </div>
-</div>
 
-<!-- Summary bar -->
-{% if entries %}
-<div class="bg-brand-50 border border-brand-100 rounded-xl px-5 py-3 mb-5 flex gap-8 text-sm">
-  <span class="text-slate-600">Showing <strong class="text-slate-800">{{ entries|length }}</strong> entries</span>
-  <span class="text-slate-600">Total hours: <strong class="text-brand-700">{{ total_hours|floatformat:2 }}h</strong></span>
-  <span class="text-slate-600">Total amount: <strong class="text-green-700">${{ total_amount|floatformat:2 }}</strong></span>
-</div>
-{% endif %}
+  <!-- ── All Entries tab ── -->
+  <div x-show="tab==='all'">
 
-<!-- Entries table -->
-<div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
-  {% if entries %}
-  <table class="w-full text-sm" id="entries-table">
-    <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
-      <tr>
-        <th class="px-5 py-3 text-left">Date</th>
-        <th class="px-5 py-3 text-left">Project</th>
-        <th class="px-5 py-3 text-left">Description</th>
-        <th class="px-5 py-3 text-right">Hours</th>
-        <th class="px-5 py-3 text-right">Amount</th>
-        <th class="px-5 py-3 text-center">Billable</th>
-        <th class="px-5 py-3 text-center">Paid</th>
-        <th class="px-5 py-3"></th>
-      </tr>
-    </thead>
-    <tbody class="divide-y divide-slate-100">
-      {% for entry in entries %}
-      <tr id="entry-row-{{ entry.id }}" class="hover:bg-slate-50 transition group">
-        <td class="px-5 py-3 text-slate-500 whitespace-nowrap">{{ entry.date|date:"D, d M Y" }}</td>
-        <td class="px-5 py-3">
-          <span class="font-medium text-slate-800">{{ entry.project.name }}</span>
-          {% if entry.project.client %}
-          <span class="text-slate-400 text-xs block">{{ entry.project.client.name }}</span>
-          {% endif %}
-        </td>
-        <td class="px-5 py-3 text-slate-600 max-w-xs">
-          <span class="truncate block">{{ entry.description|default:"—" }}</span>
-          {% if entry.tags.exists %}
-          <div class="flex flex-wrap gap-1 mt-1">
-            {% for tag in entry.tags.all %}
-            <span class="px-1.5 py-0.5 text-xs rounded font-medium" style="background:{{ tag.color }}22;color:{{ tag.color }}">{{ tag.name }}</span>
-            {% endfor %}
-          </div>
-          {% endif %}
-        </td>
-        <td class="px-5 py-3 text-right font-mono">{{ entry.hours|floatformat:2 }}h</td>
-        <td class="px-5 py-3 text-right font-mono text-green-700">${{ entry.amount|floatformat:2 }}</td>
-        <td class="px-5 py-3 text-center">
-          {% if entry.is_billable %}
-          <span class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
-          {% else %}
-          <span class="inline-block w-2 h-2 rounded-full bg-slate-300"></span>
-          {% endif %}
-        </td>
-        <td class="px-5 py-3 text-center">
-          {% if entry.is_paid %}
-          <span title="Paid on {{ entry.paid_at }}">
-            {% if entry.payment %}
-            <a href="{% url 'ui:payment_detail' entry.payment.id %}"
-               class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition">
-              <span class="inline-block w-1.5 h-1.5 rounded-full bg-green-500"></span> Paid
-            </a>
-            {% else %}
-            <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700">
-              <span class="inline-block w-1.5 h-1.5 rounded-full bg-green-500"></span> Paid
-            </span>
-            {% endif %}
-          </span>
-          {% else %}
-          <span class="inline-block w-2 h-2 rounded-full bg-slate-200" title="Unpaid"></span>
-          {% endif %}
-        </td>
-        <td class="px-5 py-3">
-          <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition justify-end">
-            <a href="{% url 'ui:entry_edit' entry.id %}"
-               class="text-xs text-brand-600 hover:underline">Edit</a>
-            {% if not entry.is_paid %}
-            <button hx-delete="{% url 'ui:entry_delete' entry.id %}"
-                    hx-target="#entry-row-{{ entry.id }}"
-                    hx-swap="outerHTML swap:0.3s"
-                    hx-confirm="Delete this entry?"
-                    class="text-xs text-red-500 hover:underline">Delete</button>
-            {% endif %}
-          </div>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <div class="px-5 py-16 text-center text-slate-400">
-    <p class="text-4xl mb-3">📭</p>
-    <p class="text-sm mb-3">No time entries found.</p>
-    <a href="{% url 'ui:entry_add' %}" class="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">Log your first entry</a>
-  </div>
-  {% endif %}
+    <!-- Toolbar -->
+    <div class="flex flex-wrap items-center gap-3 mb-6">
+      <form method="get" class="flex items-center gap-2">
+        <input type="date" name="date_from" value="{{ request.GET.date_from }}"
+               class="text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+        <span class="text-slate-400 text-sm">to</span>
+        <input type="date" name="date_to" value="{{ request.GET.date_to }}"
+               class="text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+        <select name="project" class="text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">All Projects</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {% if request.GET.project == p.id|slugify %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="px-4 py-2 bg-slate-700 text-white text-sm rounded-lg hover:bg-slate-800 transition">Filter</button>
+        <a href="{% url 'ui:entry_list' %}" class="text-sm text-slate-500 hover:text-slate-700">Clear</a>
+      </form>
+      <div class="ml-auto">
+        <a href="{% url 'ui:entry_add' %}"
+           class="px-4 py-2 bg-brand-600 text-white text-sm font-semibold rounded-lg hover:bg-brand-700 transition">+ Log Time</a>
+      </div>
+    </div>
+
+    <!-- Summary bar -->
+    {% if entries %}
+    <div class="bg-brand-50 border border-brand-100 rounded-xl px-5 py-3 mb-5 flex gap-8 text-sm">
+      <span class="text-slate-600">Showing <strong class="text-slate-800">{{ entries|length }}</strong> entries</span>
+      <span class="text-slate-600">Total hours: <strong class="text-brand-700">{{ total_hours|floatformat:2 }}h</strong></span>
+      <span class="text-slate-600">Total amount: <strong class="text-green-700">${{ total_amount|floatformat:2 }}</strong></span>
+    </div>
+    {% endif %}
+
+    <!-- Entries table -->
+    <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      {% if entries %}
+      <table class="w-full text-sm" id="entries-table">
+        <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+          <tr>
+            <th class="px-5 py-3 text-left">Date</th>
+            <th class="px-5 py-3 text-left">Project</th>
+            <th class="px-5 py-3 text-left">Description</th>
+            <th class="px-5 py-3 text-right">Hours</th>
+            <th class="px-5 py-3 text-right">Amount</th>
+            <th class="px-5 py-3 text-center">Billable</th>
+            <th class="px-5 py-3 text-center">Paid</th>
+            <th class="px-5 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for entry in entries %}
+          <tr id="entry-row-{{ entry.id }}" class="hover:bg-slate-50 transition group">
+            <td class="px-5 py-3 text-slate-500 whitespace-nowrap">{{ entry.date|date:"D, d M Y" }}</td>
+            <td class="px-5 py-3">
+              <span class="font-medium text-slate-800">{{ entry.project.name }}</span>
+              {% if entry.project.client %}
+              <span class="text-slate-400 text-xs block">{{ entry.project.client.name }}</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-3 text-slate-600 max-w-xs">
+              <span class="truncate block">{{ entry.description|default:"—" }}</span>
+              {% if entry.tags.exists %}
+              <div class="flex flex-wrap gap-1 mt-1">
+                {% for tag in entry.tags.all %}
+                <span class="px-1.5 py-0.5 text-xs rounded font-medium" style="background:{{ tag.color }}22;color:{{ tag.color }}">{{ tag.name }}</span>
+                {% endfor %}
+              </div>
+              {% endif %}
+            </td>
+            <td class="px-5 py-3 text-right font-mono">{{ entry.hours|floatformat:2 }}h</td>
+            <td class="px-5 py-3 text-right font-mono text-green-700">${{ entry.amount|floatformat:2 }}</td>
+            <td class="px-5 py-3 text-center">
+              {% if entry.is_billable %}
+              <span class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+              {% else %}
+              <span class="inline-block w-2 h-2 rounded-full bg-slate-300"></span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-3 text-center">
+              {% if entry.is_paid %}
+              <span title="Paid on {{ entry.paid_at }}">
+                {% if entry.payment %}
+                <a href="{% url 'ui:payment_detail' entry.payment.id %}"
+                   class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition">
+                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-green-500"></span> Paid
+                </a>
+                {% else %}
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700">
+                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-green-500"></span> Paid
+                </span>
+                {% endif %}
+              </span>
+              {% else %}
+              <span class="inline-block w-2 h-2 rounded-full bg-slate-200" title="Unpaid"></span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-3">
+              <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition justify-end">
+                <a href="{% url 'ui:entry_edit' entry.id %}"
+                   class="text-xs text-brand-600 hover:underline">Edit</a>
+                {% if not entry.is_paid %}
+                <button hx-delete="{% url 'ui:entry_delete' entry.id %}"
+                        hx-target="#entry-row-{{ entry.id }}"
+                        hx-swap="outerHTML swap:0.3s"
+                        hx-confirm="Delete this entry?"
+                        class="text-xs text-red-500 hover:underline">Delete</button>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="px-5 py-16 text-center text-slate-400">
+        <p class="text-4xl mb-3">📭</p>
+        <p class="text-sm mb-3">No time entries found.</p>
+        <a href="{% url 'ui:entry_add' %}" class="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">Log your first entry</a>
+      </div>
+      {% endif %}
+    </div>
+
+  </div><!-- /All Entries tab -->
+
+  <!-- ── This Week tab ── -->
+  <div x-show="tab==='week'" x-data="weekTable()">
+    <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <template x-if="rows.length > 0">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="px-5 py-3 text-left cursor-pointer select-none hover:bg-slate-100 transition"
+                  @click="sort('date')">
+                <span class="flex items-center gap-1">Date <span x-text="icon('date')" class="opacity-50 text-base leading-none"></span></span>
+              </th>
+              <th class="px-5 py-3 text-left cursor-pointer select-none hover:bg-slate-100 transition"
+                  @click="sort('project_name')">
+                <span class="flex items-center gap-1">Project <span x-text="icon('project_name')" class="opacity-50 text-base leading-none"></span></span>
+              </th>
+              <th class="px-5 py-3 text-left cursor-pointer select-none hover:bg-slate-100 transition"
+                  @click="sort('client_name')">
+                <span class="flex items-center gap-1">Client <span x-text="icon('client_name')" class="opacity-50 text-base leading-none"></span></span>
+              </th>
+              <th class="px-5 py-3 text-right cursor-pointer select-none hover:bg-slate-100 transition"
+                  @click="sort('hours')">
+                <span class="flex items-center justify-end gap-1">Hours <span x-text="icon('hours')" class="opacity-50 text-base leading-none"></span></span>
+              </th>
+              <th class="px-5 py-3 text-right cursor-pointer select-none hover:bg-slate-100 transition"
+                  @click="sort('amount')">
+                <span class="flex items-center justify-end gap-1">Amount <span x-text="icon('amount')" class="opacity-50 text-base leading-none"></span></span>
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <template x-for="(row, i) in sorted" :key="i">
+              <tr class="hover:bg-slate-50 transition">
+                <td class="px-5 py-3 text-slate-500 whitespace-nowrap" x-text="row.date_display"></td>
+                <td class="px-5 py-3 font-medium text-slate-800" x-text="row.project_name"></td>
+                <td class="px-5 py-3 text-slate-500" x-text="row.client_name || '—'"></td>
+                <td class="px-5 py-3 text-right font-mono" x-text="row.hours.toFixed(2) + 'h'"></td>
+                <td class="px-5 py-3 text-right font-mono text-green-700" x-text="'$' + row.amount.toFixed(2)"></td>
+              </tr>
+            </template>
+          </tbody>
+          <tfoot class="bg-slate-50 font-semibold text-slate-700">
+            <tr>
+              <td colspan="3" class="px-5 py-3">Total</td>
+              <td class="px-5 py-3 text-right font-mono" x-text="totalHours + 'h'"></td>
+              <td class="px-5 py-3 text-right font-mono text-green-700" x-text="'$' + totalAmount"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </template>
+      <template x-if="rows.length === 0">
+        <div class="px-5 py-16 text-center text-slate-400">
+          <p class="text-4xl mb-3">📭</p>
+          <p class="text-sm mb-3">No entries for this week.</p>
+          <a href="{% url 'ui:entry_add' %}" class="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg hover:bg-brand-700">Log your first entry</a>
+        </div>
+      </template>
+    </div>
+  </div><!-- /This Week tab -->
+
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const _thisWeekEntries = {{ this_week_json|safe }};
+function weekTable() {
+  return {
+    rows: _thisWeekEntries,
+    sortKey: 'date',
+    sortAsc: false,
+    sort(key) {
+      if (this.sortKey === key) this.sortAsc = !this.sortAsc;
+      else { this.sortKey = key; this.sortAsc = true; }
+    },
+    icon(key) {
+      if (this.sortKey !== key) return '↕';
+      return this.sortAsc ? '↑' : '↓';
+    },
+    get sorted() {
+      return [...this.rows].sort((a, b) => {
+        const av = a[this.sortKey], bv = b[this.sortKey];
+        if (av < bv) return this.sortAsc ? -1 : 1;
+        if (av > bv) return this.sortAsc ? 1 : -1;
+        return 0;
+      });
+    },
+    get totalHours() {
+      return this.rows.reduce((s, r) => s + r.hours, 0).toFixed(2);
+    },
+    get totalAmount() {
+      return this.rows.reduce((s, r) => s + r.amount, 0).toFixed(2);
+    },
+  };
+}
+</script>
 {% endblock %}

@@ -139,12 +139,36 @@ def entry_list(request):
     else:
         projects = Project.objects.filter(members=request.user, is_deleted=False).order_by("name")
 
+    today_d = date.today()
+    week_mon = today_d - timedelta(days=today_d.weekday())
+    week_sun = week_mon + timedelta(days=6)
+    this_week_qs = (
+        TimeEntry.objects
+        .filter(user=request.user, date__gte=week_mon, date__lte=week_sun)
+        .select_related("project", "project__client")
+        .order_by("-date", "-created_at")
+    )
+    this_week_json = json.dumps([
+        {
+            "date": e.date.isoformat(),
+            "date_display": e.date.strftime("%d %b"),
+            "project_name": e.project.name,
+            "client_name": e.project.client.name if e.project.client else "",
+            "hours": float(e.hours),
+            "amount": float(e.amount),
+        }
+        for e in this_week_qs
+    ])
+
     return render(request, "ui/entries.html", {
         **_context_base(request),
         "entries": entries,
         "projects": projects,
         "total_hours": total_hours,
         "total_amount": total_amount,
+        "this_week_json": this_week_json,
+        "week_start": week_mon,
+        "week_end": week_sun,
     })
 
 
