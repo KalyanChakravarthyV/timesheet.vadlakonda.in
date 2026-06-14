@@ -14,8 +14,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
 from timesheets.models import Client, Payment, Project, Tag, TimeEntry, WeeklyReport
-from timesheets.services.email_service import send_weekly_report
-from timesheets.services.excel_export import build_weekly_excel
+from timesheets.services.email_service import send_entries_report, send_weekly_report
+from timesheets.services.excel_export import build_entries_excel, build_weekly_excel
 from .forms import ClientForm, PaymentForm, ProjectForm, TimeEntryForm
 
 
@@ -160,6 +160,7 @@ def entry_list(request):
         for e in this_week_qs
     ])
 
+    from django.conf import settings as _settings
     return render(request, "ui/entries.html", {
         **_context_base(request),
         "entries": entries,
@@ -169,7 +170,90 @@ def entry_list(request):
         "this_week_json": this_week_json,
         "week_start": week_mon,
         "week_end": week_sun,
+        "email_provider": _settings.EMAIL_PROVIDER,
     })
+
+
+@login_required
+def entry_export(request):
+    qs = TimeEntry.objects.filter(user=request.user).select_related("project", "project__client").prefetch_related("tags")
+
+    date_from_str = request.GET.get("date_from")
+    date_to_str = request.GET.get("date_to")
+    project_id = request.GET.get("project")
+
+    date_from = date.fromisoformat(date_from_str) if date_from_str else None
+    date_to = date.fromisoformat(date_to_str) if date_to_str else None
+
+    if date_from:
+        qs = qs.filter(date__gte=date_from)
+    if date_to:
+        qs = qs.filter(date__lte=date_to)
+    if project_id:
+        qs = qs.filter(project_id=project_id)
+
+    entries = list(qs.order_by("date", "project__name"))
+    wb_bytes = build_entries_excel(request.user, entries, date_from, date_to)
+
+    if date_from and date_to:
+        range_label = f"{date_from}_{date_to}"
+    elif date_from:
+        range_label = f"from_{date_from}"
+    elif date_to:
+        range_label = f"to_{date_to}"
+    else:
+        range_label = "all"
+    filename = f"entries_{range_label}.xlsx"
+
+    response = HttpResponse(
+        wb_bytes,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
+def entry_send(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST only"}, status=405)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        data = {}
+
+    date_from_str = data.get("date_from")
+    date_to_str = data.get("date_to")
+    project_id = data.get("project")
+    recipient = data.get("email") or request.user.email
+
+    date_from = date.fromisoformat(date_from_str) if date_from_str else None
+    date_to = date.fromisoformat(date_to_str) if date_to_str else None
+
+    qs = (
+        TimeEntry.objects
+        .filter(user=request.user)
+        .select_related("project", "project__client")
+        .prefetch_related("tags")
+    )
+    if date_from:
+        qs = qs.filter(date__gte=date_from)
+    if date_to:
+        qs = qs.filter(date__lte=date_to)
+    if project_id:
+        qs = qs.filter(project_id=project_id)
+
+    entries = list(qs)
+    result = send_entries_report(
+        user=request.user,
+        entries=entries,
+        date_from=date_from,
+        date_to=date_to,
+        recipient_email=recipient,
+    )
+    if result["success"]:
+        return JsonResponse({"message": "Sent!", "provider": result["provider"]})
+    return JsonResponse({"error": result.get("error", "Failed to send.")}, status=500)
 
 
 @login_required

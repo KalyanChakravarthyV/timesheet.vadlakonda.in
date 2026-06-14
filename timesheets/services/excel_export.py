@@ -39,6 +39,19 @@ def _align(h="left", v="center", wrap=False) -> Alignment:
     return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
 
 
+def build_entries_excel(
+    user,
+    entries,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> bytes:
+    """Return raw bytes of a .xlsx workbook for an arbitrary set of time entries."""
+    dates = [e.date for e in entries] if entries else []
+    d_from = date_from or (min(dates) if dates else date.today())
+    d_to = date_to or (max(dates) if dates else date.today())
+    return build_weekly_excel(user, entries, d_from, d_to)
+
+
 def build_weekly_excel(
     user,
     entries,

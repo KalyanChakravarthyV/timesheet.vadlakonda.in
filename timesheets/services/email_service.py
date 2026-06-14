@@ -13,7 +13,7 @@ from typing import Literal
 from django.conf import settings
 from django.template.loader import render_to_string
 
-from .excel_export import build_weekly_excel
+from .excel_export import build_entries_excel, build_weekly_excel
 from ..models import WeeklyReport
 
 logger = logging.getLogger(__name__)
@@ -118,6 +118,110 @@ def send_weekly_report(
                 "recipient_email": recipient,
                 "attachment_name": filename,
             },
+        )
+
+    return result
+
+
+def send_entries_report(
+    user,
+    entries: list,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    recipient_email: str | None = None,
+) -> dict:
+    """
+    Build an Excel workbook for arbitrary-range entries, render the email, and
+    dispatch via the configured provider. Returns {"success": True, "provider": "..."}.
+    """
+    recipient = recipient_email or user.email
+    if not recipient:
+        return {"success": False, "error": "No recipient email address available."}
+
+    total_hours = sum(e.hours for e in entries)
+    total_amount = sum(e.amount for e in entries)
+
+    if date_from and date_to:
+        range_label = f"{date_from.strftime('%Y-%m-%d')}_{date_to.strftime('%Y-%m-%d')}"
+    elif date_from:
+        range_label = f"from_{date_from.strftime('%Y-%m-%d')}"
+    elif date_to:
+        range_label = f"to_{date_to.strftime('%Y-%m-%d')}"
+    else:
+        range_label = "all"
+    filename = f"entries_{range_label}.xlsx"
+
+    workbook_bytes = build_entries_excel(user, entries, date_from, date_to)
+
+    project_summary: dict[str, dict] = {}
+    for entry in entries:
+        key = entry.project.name
+        if key not in project_summary:
+            project_summary[key] = {
+                "name": key,
+                "client": entry.project.client.name if entry.project.client else "—",
+                "hours": Decimal("0"),
+                "amount": Decimal("0"),
+            }
+        project_summary[key]["hours"] += entry.hours
+        project_summary[key]["amount"] += entry.amount
+
+    context = {
+        "user": user,
+        "date_from": date_from,
+        "date_to": date_to,
+        "total_hours": total_hours,
+        "total_amount": total_amount,
+        "project_summary": list(project_summary.values()),
+        "company_name": settings.COMPANY_NAME,
+        "filename": filename,
+    }
+
+    if date_from and date_to:
+        date_range_str = f"{date_from.strftime('%d %b %Y')} – {date_to.strftime('%d %b %Y')}"
+    elif date_from:
+        date_range_str = f"from {date_from.strftime('%d %b %Y')}"
+    elif date_to:
+        date_range_str = f"up to {date_to.strftime('%d %b %Y')}"
+    else:
+        date_range_str = "all time"
+
+    subject = f"Time Entries — {date_range_str} ({total_hours:.2f}h)"
+    html_body = render_to_string("email/entries_report.html", context)
+    text_body = render_to_string("email/entries_report.txt", context)
+
+    provider = settings.EMAIL_PROVIDER
+    result = _dispatch(
+        provider=provider,
+        recipient=recipient,
+        subject=subject,
+        html_body=html_body,
+        text_body=text_body,
+        attachment_bytes=workbook_bytes,
+        filename=filename,
+    )
+
+    if not result["success"] and provider == "sendgrid":
+        logger.warning("SendGrid failed, retrying with Resend: %s", result.get("error"))
+        result = _dispatch(
+            provider="resend",
+            recipient=recipient,
+            subject=subject,
+            html_body=html_body,
+            text_body=text_body,
+            attachment_bytes=workbook_bytes,
+            filename=filename,
+        )
+    elif not result["success"] and provider == "resend":
+        logger.warning("Resend failed, retrying with SendGrid: %s", result.get("error"))
+        result = _dispatch(
+            provider="sendgrid",
+            recipient=recipient,
+            subject=subject,
+            html_body=html_body,
+            text_body=text_body,
+            attachment_bytes=workbook_bytes,
+            filename=filename,
         )
 
     return result

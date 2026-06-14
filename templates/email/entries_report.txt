@@ -1,0 +1,22 @@
+{{ company_name }} — Time Entries
+{% if date_from and date_to %}{{ date_from|date:"d M Y" }} to {{ date_to|date:"d M Y" }}{% elif date_from %}From {{ date_from|date:"d M Y" }}{% elif date_to %}Up to {{ date_to|date:"d M Y" }}{% else %}All time{% endif %}
+
+Hi {{ user.first_name|default:user.email }},
+
+Here is your time entries export.
+
+TOTALS
+------
+Hours:  {{ total_hours|floatformat:2 }}h
+Amount: ${{ total_amount|floatformat:2 }}
+
+BREAKDOWN BY PROJECT
+--------------------
+{% for p in project_summary %}{{ p.name }} ({{ p.client }})
+  Hours:  {{ p.hours|floatformat:2 }}h
+  Amount: ${{ p.amount|floatformat:2 }}
+{% endfor %}
+The full daily timesheet is attached as {{ filename }}.
+
+--
+{{ company_name }} · Sent automatically by Timesheet
